@@ -31,7 +31,7 @@ npm install @modelcontextprotocol/sdk
 
 Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling model. `web_search` / `web_fetch` need an `OLLAMA_API_KEY` (Ollama Cloud).
 
-## Quick start — five lines
+## Quick start — four lines
 
 ```js
 import { createAgent, webSearchTool } from 'ollama-agent-kit'
