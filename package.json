@@ -1,6 +1,6 @@
 {
     "name": "ollama-agent-kit",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "description": "Minimal Node.js library for building autonomous tool-calling AI agents on local LLMs with Ollama. A unified registry merges local (Zod) tools and MCP tools: define a tool once — your agent uses it, your MCP server exposes it.",
     "type": "module",
     "main": "./src/index.js",
