@@ -71,45 +71,12 @@ See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-
 
 ## Built-in tools
 
-Three tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
+Two tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
 
-| Tool             | Purpose                                              | Notes |
-| ---------------- | ---------------------------------------------------- | ----- |
-| `webSearchTool`  | Web search via the Ollama web API                    | Needs `OLLAMA_API_KEY` |
-| `webFetchTool`   | Fetch the content of a URL                            | Needs `OLLAMA_API_KEY` |
-| `shellTool`      | Run a shell command on the host and return its output | ⚠️ Arbitrary command execution — sandbox it |
-
-### `shellTool` — running shell commands
-
-`shellTool` lets the agent execute shell commands (filesystem, `git`, builds, ...). Its handler returns `{ command, exitCode, stdout, stderr }` and never throws on a non-zero exit — the model gets the error text and can react to it.
-
-```js
-import { createAgent, shellTool } from 'ollama-agent-kit'
-
-const agent = createAgent({ tools: [shellTool] })          // defaults
-await agent.run('How many commits are on the current branch?')
-```
-
-**This is arbitrary command execution on the host machine** — only enable it in a trusted or sandboxed environment. Constrain it:
-
-```js
-const agent = createAgent({
-    tools: [shellTool({
-        cwd: '/srv/project',              // where commands run
-        timeout: 10_000,                  // kill after 10s
-        allow: (cmd) => !/\brm\b|\bsudo\b/.test(cmd),  // hard guard: return false to block
-    })],
-})
-```
-
-| Option      | Default          | Description |
-| ----------- | ---------------- | ----------- |
-| `cwd`       | `process.cwd()`  | Working directory for commands |
-| `timeout`   | `30000`          | Kill a command after this many ms |
-| `maxBuffer` | `1048576`        | Max bytes of stdout/stderr captured |
-| `shell`     | platform default | Shell used to run the command |
-| `allow`     | –                | `(command) => boolean`; return `false` to block a command |
-| `exposeMcp` | `false`          | Publish it over your MCP server too (off by default — it's dangerous) |
+| Tool             | Purpose                            | Notes |
+| ---------------- | ---------------------------------- | ----- |
+| `webSearchTool`  | Web search via the Ollama web API  | Needs `OLLAMA_API_KEY` |
+| `webFetchTool`   | Fetch the content of a URL         | Needs `OLLAMA_API_KEY` |
 
 ## Configuring the agent
 
@@ -227,7 +194,7 @@ await serveMcpHttp([bulb], {
 import {
     createAgent, createOllamaClient,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
-    webSearchTool, webFetchTool, shellTool,
+    webSearchTool, webFetchTool,
     McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
