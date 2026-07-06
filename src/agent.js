@@ -45,7 +45,7 @@ async function resolveMcpTools(mcp) {
  *   the request when unset, so non-thinking models work out of the box.
  * @param {number}   [config.temperature=0.8] Sampling temperature.
  * @param {string}   [config.systemPrompt] System prompt for the agent.
- * @param {number}   [config.maxTurns=50] Safety cap on loop iterations.
+ * @param {number}   [config.maxTurns=10] Safety cap on loop iterations.
  * @param {import('./registry.js').Tool[]} [config.tools] Local tools available to the agent.
  * @param {*}        [config.mcp] McpClientManager | async () => tools | tools[] | falsy.
  * @param {(e:{turn:number,message:object,messages:object[]}) => void} [config.onTurn] Called after each model turn.
@@ -61,7 +61,7 @@ export function createAgent({
     think,
     temperature = 0.8,
     systemPrompt = defaultSystemPrompt,
-    maxTurns = 50,
+    maxTurns = 10,
     tools = [],
     mcp = null,
     onTurn = noop,

@@ -93,7 +93,7 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 | `think`        | unset                  | Ollama thinking effort (`'low'`\|`'medium'`\|`'high'`). Only sent when set, so non-thinking models work out of the box |
 | `temperature`  | `0.8`                  | Sampling temperature                                               |
 | `systemPrompt` | built-in               | System prompt for the agent                                        |
-| `maxTurns`     | `50`                   | Safety cap on loop iterations (throws `MaxTurnsError` if exceeded) |
+| `maxTurns`     | `10`                   | Safety cap on loop iterations (throws `MaxTurnsError` if exceeded) |
 | `tools`        | `[]`                   | Local tools available to the agent                                 |
 | `mcp`          | `null`                 | `McpClientManager` \| `async () => tools` \| `tools[]` \| falsy    |
 | `onTurn`       | no-op                  | `({ turn, message, messages }) => void` after each model turn      |
