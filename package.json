@@ -1,0 +1,56 @@
+{
+    "name": "ollama-agent-kit",
+    "version": "0.1.0",
+    "description": "A minimal, autonomous tool-using agent loop for Ollama, with a unified registry that merges local (Zod) tools and MCP tools. Define a tool once — your agent uses it, your MCP server exposes it.",
+    "type": "module",
+    "main": "./src/index.js",
+    "exports": {
+        ".": "./src/index.js",
+        "./tools": "./src/tools/index.js",
+        "./mcp": "./src/mcp/index.js"
+    },
+    "files": [
+        "src",
+        "README.md",
+        "LICENSE"
+    ],
+    "scripts": {
+        "test": "node --test"
+    },
+    "keywords": [
+        "ollama",
+        "agent",
+        "ai",
+        "llm",
+        "mcp",
+        "model-context-protocol",
+        "tool-calling",
+        "tools",
+        "zod",
+        "agentic"
+    ],
+    "author": "niceunderground",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/niceunderground/ollama-agent-kit.git"
+    },
+    "engines": {
+        "node": ">=18"
+    },
+    "dependencies": {
+        "ollama": "^0.6.2",
+        "zod": "^4.4.3"
+    },
+    "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0"
+    },
+    "peerDependenciesMeta": {
+        "@modelcontextprotocol/sdk": {
+            "optional": true
+        }
+    },
+    "devDependencies": {
+        "@modelcontextprotocol/sdk": "^1.29.0"
+    }
+}

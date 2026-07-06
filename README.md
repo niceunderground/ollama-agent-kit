@@ -1,0 +1,198 @@
+# ollama-agent-kit
+
+A minimal, autonomous tool-using agent loop for [Ollama](https://ollama.com), with a unified tool registry that merges **local tools** (defined with [Zod](https://zod.dev) schemas) and **MCP tools** (loaded from external [Model Context Protocol](https://modelcontextprotocol.io) servers).
+
+> **Define a tool once — your agent uses it, and your MCP server exposes it.** The registry works in both directions.
+
+The core is intentionally small: a chat loop that sends the conversation to Ollama, executes any requested tool calls **in parallel**, feeds the results back, and stops when the model produces a final answer (or `maxTurns` is reached).
+
+```
+createAgent(config).run(prompt)
+   │
+   ├── resolves tools: your local registry + MCP servers
+   │
+   └── loop (up to maxTurns):
+         ├── ollama.chat() with the merged tool list
+         ├── no tool calls? → return the final answer
+         └── run all tool calls in parallel → feed results back → next turn
+```
+
+## Install
+
+```bash
+npm install ollama-agent-kit
+# MCP support is optional — install the SDK only if you connect to MCP servers:
+npm install @modelcontextprotocol/sdk
+```
+
+Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling model. `web_search` / `web_fetch` need an `OLLAMA_API_KEY` (Ollama Cloud).
+
+## Five-line example
+
+```js
+import { createAgent, webSearchTool } from 'ollama-agent-kit'
+
+const agent = createAgent({ tools: [webSearchTool({ apiKey: process.env.OLLAMA_API_KEY })] })
+const answer = await agent.run('Summarize the latest new media art news')
+console.log(answer)
+```
+
+## Define a tool
+
+One object, a Zod schema, a handler. `exposeAgent` / `exposeMcp` decide where it shows up — the **same definition** serves both the agent loop and your MCP server.
+
+```js
+import { defineTool } from 'ollama-agent-kit'
+import { z } from 'zod'
+
+export const bulb = defineTool({
+    name: 'bulb',
+    description: 'Control a smart light: turn it on/off and set brightness.',
+    parameters: z.object({
+        room: z.string().describe('Room name, e.g. "studio"'),
+        on: z.boolean().optional(),
+        brightness: z.number().min(0).max(100).optional(),
+    }),
+    exposeAgent: true,   // available to the agent loop
+    exposeMcp: true,     // and publishable by your own MCP server
+    handler: async ({ room, on, brightness }) => setLight(room, { on, brightness }),
+})
+```
+
+- `parameters` (Zod) is converted to JSON Schema automatically for the Ollama API.
+- Tools are validated up front (name present, handler is a function, no duplicates) so a malformed tool fails immediately instead of mid-conversation.
+- MCP tools arrive already carrying JSON Schema (`rawParameters`), so both kinds live in one registry.
+
+See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/home-lights.js) for the full home-automation demo — the kind of thing that runs happily on a Raspberry Pi.
+
+## Configure once, run many times
+
+`createAgent` injects the Ollama client, model and tools; `.run()` executes a prompt.
+
+```js
+const agent = createAgent({
+    host: 'http://localhost:11434',   // optional (this is the default) — or apiKey / a pre-built `client`
+    model: 'qwen3',
+    tools: [bulb, webSearchTool({ apiKey })],
+    onTurn:     ({ turn }) => console.log(`turn ${turn}`),
+    onToolCall: ({ name, result }) => console.log(`→ ${name}`, result),
+})
+
+await agent.run('Turn on the studio light and tell me the weather in Naples')
+```
+
+### `createAgent(config)` options
+
+| Option         | Default                | Description                                                        |
+| -------------- | ---------------------- | ------------------------------------------------------------------ |
+| `host`         | `http://localhost:11434` | Ollama host (ignored if `client` is given)                       |
+| `apiKey`       | –                      | Ollama API key (ignored if `client` is given)                      |
+| `fetch`        | –                      | Custom fetch, injected instead of patching `globalThis`            |
+| `client`       | –                      | A pre-built Ollama client (overrides `host`/`apiKey`/`fetch`)      |
+| `model`        | `qwen3`                | Any Ollama model with tool-calling support                         |
+| `think`        | unset                  | Ollama thinking effort (`'low'`\|`'medium'`\|`'high'`). Only sent when set, so non-thinking models work out of the box |
+| `temperature`  | `0.8`                  | Sampling temperature                                               |
+| `systemPrompt` | built-in               | System prompt for the agent                                        |
+| `maxTurns`     | `50`                   | Safety cap on loop iterations (throws `MaxTurnsError` if exceeded) |
+| `tools`        | `[]`                   | Local tools available to the agent                                 |
+| `mcp`          | `null`                 | `McpClientManager` \| `async () => tools` \| `tools[]` \| falsy    |
+| `onTurn`       | no-op                  | `({ turn, message, messages }) => void` after each model turn      |
+| `onToolCall`   | no-op                  | `({ name, arguments, result, error, turn }) => void` per tool call |
+| `onFinal`      | no-op                  | `({ content, turns, messages }) => void` on the final answer       |
+
+`run(prompt, { model, tools })` accepts per-run overrides and returns the model's final answer.
+
+## MCP servers
+
+External MCP servers (stdio or HTTP) are connected by `McpClientManager`. Their tools are loaded at run time, prefixed with the server name (`filesystem__read_file`), and merged into the same registry — local names win on collision.
+
+```js
+import { createAgent, McpClientManager } from 'ollama-agent-kit'
+
+const mcp = new McpClientManager({
+    servers: {
+        filesystem: {
+            enabled: true,
+            type: 'stdio',
+            command: 'npx',
+            args: ['-y', '@modelcontextprotocol/server-filesystem', process.cwd()],
+        },
+    },
+})
+
+const agent = createAgent({ mcp })
+const answer = await agent.run('List the files in the current directory')
+await mcp.close()
+```
+
+HTTP servers behind OAuth are supported via `FileOAuthProvider` (tokens persisted per-server under `.mcp-auth/`). Log in once with [`examples/mcp-auth.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/mcp-auth.js). You can also load a `{ servers: {...} }` JSON file with `loadMcpConfigFile(path)`.
+
+## Publish your tools over MCP
+
+The reciprocal of `createAgent`: hand the **same** tool definitions to an MCP server and every tool flagged `exposeMcp: true` becomes callable by any MCP client (Claude Desktop, another agent, ...). The Zod schema is converted to JSON Schema for you.
+
+```js
+import { createMcpServer, serveMcpStdio, serveMcpHttp } from 'ollama-agent-kit'
+
+// Just build the configured server (register onto any transport yourself):
+const server = await createMcpServer([bulb, add])   // only exposeMcp tools are registered
+
+// Or serve it directly, one line:
+await serveMcpStdio([bulb, add])                     // local process, spawned over stdio
+await serveMcpHttp([bulb, add], { port: 3000 })      // online at http://localhost:3000/mcp
+```
+
+See [`examples/serve-mcp.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/serve-mcp.js) for the full, runnable server.
+
+## Going online
+
+An MCP server speaks over one of two **transports**:
+
+- **stdio** — the server is a local process the client spawns; it talks over stdin/stdout. No network, no auth. Ideal on a Raspberry Pi next to your hardware. Use `serveMcpStdio(tools)`.
+- **Streamable HTTP** — the server exposes an HTTP endpoint (`https://your-host/mcp`) any client can reach. This is what "online" means. Use `serveMcpHttp(tools, { port })`.
+
+`serveMcpHttp` starts a plain Node HTTP server (no Express dependency) in **stateless** mode — a fresh MCP server is created per request, which suits low-traffic home deployments. To actually expose it:
+
+1. **Run it** on a machine with a public address (VPS, Raspberry Pi, ...), or a tunnel like Cloudflare Tunnel / ngrok for quick tests.
+2. **Add HTTPS** with a reverse proxy (Caddy, Nginx) in front of the port.
+3. **Protect it.** An open endpoint lets anyone with the URL run your tools. The simplest guard is a shared bearer token — pass `authToken` and clients must send `Authorization: Bearer <token>`. For full OAuth, use the SDK's auth middleware.
+
+```js
+await serveMcpHttp([bulb], {
+    port: 3000,
+    authToken: process.env.MCP_TOKEN,   // require Authorization: Bearer <token>
+})
+```
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `port` | `3000` | Listen port |
+| `host` | all interfaces | Bind address |
+| `path` | `/mcp` | Endpoint path |
+| `authToken` | – | If set, require `Authorization: Bearer <token>` |
+| `enableJsonResponse` | `false` | Return plain JSON instead of an SSE stream |
+| `name` / `version` | kit defaults | Advertised MCP server identity |
+| `includeAll` | `false` | Register every tool, ignoring `exposeMcp` |
+
+## API
+
+```js
+import {
+    createAgent, createOllamaClient,
+    createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
+    webSearchTool, webFetchTool,
+    McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
+    createMcpServer, serveMcpStdio, serveMcpHttp,
+    AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
+} from 'ollama-agent-kit'
+```
+
+## Tests
+
+```bash
+npm test        # node --test
+```
+
+## License
+
+[MIT](LICENSE) © niceunderground
