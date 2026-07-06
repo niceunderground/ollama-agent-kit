@@ -46,7 +46,10 @@ async function resolveMcpTools(mcp) {
  * @param {number}   [config.temperature=0.8] Sampling temperature.
  * @param {string}   [config.systemPrompt] System prompt for the agent.
  * @param {number}   [config.maxTurns=10] Safety cap on loop iterations.
- * @param {import('./registry.js').Tool[]} [config.tools] Local tools available to the agent.
+ * @param {Array<import('./registry.js').Tool | ((ctx:{client:import('ollama').Ollama,apiKey?:string,host:string}) => import('./registry.js').Tool)>} [config.tools]
+ *   Local tools available to the agent. An entry can also be a factory function: it is called once
+ *   with the agent context (`client`, `apiKey`, `host`), so tools like `webSearchTool` / `webFetchTool`
+ *   can be passed bare and reuse the agent's client/API key instead of configuring their own.
  * @param {*}        [config.mcp] McpClientManager | async () => tools | tools[] | falsy.
  * @param {(e:{turn:number,message:object,messages:object[]}) => void} [config.onTurn] Called after each model turn.
  * @param {(e:{name:string,arguments:any,result:any,error:Error|null,turn:number}) => void} [config.onToolCall] Called after each tool execution.
@@ -70,10 +73,15 @@ export function createAgent({
 } = {}) {
     const ollama = client ?? createOllamaClient({ host, apiKey, fetch })
 
+    /** A function entry in a tools list is a factory: call it with the agent context. */
+    const toolContext = { client: ollama, apiKey, host }
+    const materializeTools = list => list.map(t => (typeof t === 'function' ? t(toolContext) : t))
+    const localTools = materializeTools(tools)
+
     /** Merge local tools with MCP tools (local names win on collision) and validate. */
     async function resolveTools() {
-        const seen = new Set(tools.map(t => t?.name))
-        const merged = [...tools]
+        const seen = new Set(localTools.map(t => t?.name))
+        const merged = [...localTools]
         for (const tool of await resolveMcpTools(mcp)) {
             if (seen.has(tool.name)) continue
             seen.add(tool.name)
@@ -92,7 +100,7 @@ export function createAgent({
      * @returns {Promise<string>} the model's final answer
      */
     async function run(prompt, { model: runModel = model, tools: runTools } = {}) {
-        const activeTools = runTools ?? await resolveTools()
+        const activeTools = runTools ? materializeTools(runTools) : await resolveTools()
         const ollamaTools = activeTools.map(toOllamaTool)
         const handlers = toHandlerMap(activeTools)
 

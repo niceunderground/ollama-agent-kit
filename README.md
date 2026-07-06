@@ -32,7 +32,7 @@ Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling mod
 ```js
 import { createAgent, webSearchTool } from 'ollama-agent-kit'
 
-const agent = createAgent({ tools: [webSearchTool({ apiKey: process.env.OLLAMA_API_KEY })] })
+const agent = createAgent({ apiKey: process.env.OLLAMA_API_KEY, tools: [webSearchTool] })
 const answer = await agent.run('Summarize the latest new media art news')
 console.log(answer)
 ```
@@ -71,9 +71,10 @@ See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-
 
 ```js
 const agent = createAgent({
-    host: 'http://localhost:11434',   // optional (this is the default) — or apiKey / a pre-built `client`
+    host: 'http://localhost:11434',   // optional (this is the default) — or a pre-built `client`
+    apiKey: process.env.OLLAMA_API_KEY, // one key for cloud models + web tools
     model: 'qwen3',
-    tools: [bulb, webSearchTool({ apiKey })],
+    tools: [bulb, webSearchTool],     // bare tool factories reuse the agent's client/apiKey
     onTurn:     ({ turn }) => console.log(`turn ${turn}`),
     onToolCall: ({ name, result }) => console.log(`→ ${name}`, result),
 })
@@ -94,7 +95,7 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 | `temperature`  | `0.8`                  | Sampling temperature                                               |
 | `systemPrompt` | built-in               | System prompt for the agent                                        |
 | `maxTurns`     | `10`                   | Safety cap on loop iterations (throws `MaxTurnsError` if exceeded) |
-| `tools`        | `[]`                   | Local tools available to the agent                                 |
+| `tools`        | `[]`                   | Local tools available to the agent. An entry can also be a factory `(ctx) => Tool` called with `{ client, apiKey, host }` — so `webSearchTool` / `webFetchTool` can be passed bare and reuse the agent's client |
 | `mcp`          | `null`                 | `McpClientManager` \| `async () => tools` \| `tools[]` \| falsy    |
 | `onTurn`       | no-op                  | `({ turn, message, messages }) => void` after each model turn      |
 | `onToolCall`   | no-op                  | `({ name, arguments, result, error, turn }) => void` per tool call |

@@ -4,7 +4,9 @@ import { createOllamaClient } from '../ollama.js'
 
 /**
  * Optional `web_fetch` tool, backed by the Ollama web fetch API.
- * Requires an Ollama API key (Ollama Cloud). Pass a `client` or an `apiKey`.
+ * Requires an Ollama API key (Ollama Cloud). Pass a `client` or an `apiKey` —
+ * or pass the bare `webFetchTool` function in `createAgent`'s `tools` list to
+ * reuse the agent's client/API key (falls back to the OLLAMA_API_KEY env var).
  *
  * @param {object} [opts]
  * @param {import('ollama').Ollama} [opts.client] Pre-built Ollama client to use.

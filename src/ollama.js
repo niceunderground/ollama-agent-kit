@@ -10,8 +10,10 @@ import { Ollama } from 'ollama'
  * @param {object} [opts]
  * @param {string} [opts.host='http://localhost:11434'] Base URL of a local/remote Ollama instance.
  * @param {string} [opts.apiKey] API key (for Ollama Cloud / hosted models and web search / web fetch).
+ *   Sent as an `Authorization: Bearer` header — ollama-js 0.6.x has no `apiKey` option and only
+ *   falls back to the `OLLAMA_API_KEY` env var for ollama.com requests.
  * @param {Function} [opts.fetch] Custom fetch implementation, injected instead of patching globalThis.
- * @param {Record<string,string>} [opts.headers] Extra headers sent with every request.
+ * @param {Record<string,string>} [opts.headers] Extra headers sent with every request (win over `apiKey`).
  * @returns {import('ollama').Ollama}
  */
 export function createOllamaClient({
@@ -22,8 +24,12 @@ export function createOllamaClient({
 } = {}) {
     const opts = {}
     if (host) opts.host = host
-    if (apiKey) opts.apiKey = apiKey
     if (fetch) opts.fetch = fetch
-    if (headers) opts.headers = headers
+    if (apiKey || headers) {
+        opts.headers = {
+            ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+            ...headers,
+        }
+    }
     return new Ollama(opts)
 }

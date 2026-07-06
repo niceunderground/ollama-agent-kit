@@ -106,6 +106,22 @@ test('run throws MaxTurnsError when the model never stops', async () => {
     await assert.rejects(() => agent.run('loop'), MaxTurnsError)
 })
 
+test('a function entry in tools is called with the agent context (client, apiKey, host)', async () => {
+    const client = fakeClient([{ content: 'x', tool_calls: [] }])
+    let receivedCtx = null
+    const factory = (ctx) => {
+        receivedCtx = ctx
+        return { ...echoTool, name: 'from_factory' }
+    }
+    const agent = createAgent({ client, apiKey: 'k123', tools: [echoTool, factory] })
+
+    const resolved = await agent.resolveTools()
+    assert.deepEqual(resolved.map(t => t.name), ['echo', 'from_factory'])
+    assert.equal(receivedCtx.client, client)
+    assert.equal(receivedCtx.apiKey, 'k123')
+    assert.equal(receivedCtx.host, 'http://localhost:11434')
+})
+
 test('mcp tools are merged and local names win on collision', async () => {
     const client = fakeClient([{ content: 'x', tool_calls: [] }])
     const agent = createAgent({

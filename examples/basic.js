@@ -6,14 +6,13 @@
 
 import { createAgent, webSearchTool, webFetchTool } from 'ollama-agent-kit'
 
-const apiKey = process.env.OLLAMA_API_KEY
-
 const agent = createAgent({
     host: process.env.OLLAMA_HOST,        // defaults to http://localhost:11434
+    apiKey: process.env.OLLAMA_API_KEY,   // shared by cloud models and the web tools below
     model: process.env.OLLAMA_MODEL || 'qwen3',
     tools: [
-        webSearchTool({ apiKey }),
-        webFetchTool({ apiKey }),
+        webSearchTool,
+        webFetchTool,
     ],
     onToolCall: ({ name, arguments: args }) => console.log(`→ ${name}`, args),
 })
