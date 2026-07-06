@@ -1,6 +1,10 @@
 # ollama-agent-kit
 
-A minimal, autonomous tool-using agent loop for [Ollama](https://ollama.com), with a unified tool registry that merges **local tools** (defined with [Zod](https://zod.dev) schemas) and **MCP tools** (loaded from external [Model Context Protocol](https://modelcontextprotocol.io) servers).
+[![npm version](https://img.shields.io/npm/v/ollama-agent-kit)](https://www.npmjs.com/package/ollama-agent-kit)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
+
+**ollama-agent-kit** is a minimal Node.js library for building autonomous, tool-calling AI agents on local LLMs with [Ollama](https://ollama.com). It provides an agent loop with function calling and a unified tool registry that merges **local tools** (defined with [Zod](https://zod.dev) schemas) and **MCP tools** (loaded from external [Model Context Protocol](https://modelcontextprotocol.io) servers).
 
 > **Define a tool once — your agent uses it, and your MCP server exposes it.** The registry works in both directions.
 
@@ -27,7 +31,7 @@ npm install @modelcontextprotocol/sdk
 
 Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling model. `web_search` / `web_fetch` need an `OLLAMA_API_KEY` (Ollama Cloud).
 
-## Five-line example
+## Quick start — five lines
 
 ```js
 import { createAgent, webSearchTool } from 'ollama-agent-kit'
@@ -37,7 +41,7 @@ const answer = await agent.run('Summarize the latest new media art news')
 console.log(answer)
 ```
 
-## Define a tool
+## Defining a tool
 
 One object, a Zod schema, a handler. `exposeAgent` / `exposeMcp` decide where it shows up — the **same definition** serves both the agent loop and your MCP server.
 
@@ -65,7 +69,49 @@ export const bulb = defineTool({
 
 See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/home-lights.js) for the full home-automation demo — the kind of thing that runs happily on a Raspberry Pi.
 
-## Configure once, run many times
+## Built-in tools
+
+Three tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
+
+| Tool             | Purpose                                              | Notes |
+| ---------------- | ---------------------------------------------------- | ----- |
+| `webSearchTool`  | Web search via the Ollama web API                    | Needs `OLLAMA_API_KEY` |
+| `webFetchTool`   | Fetch the content of a URL                            | Needs `OLLAMA_API_KEY` |
+| `shellTool`      | Run a shell command on the host and return its output | ⚠️ Arbitrary command execution — sandbox it |
+
+### `shellTool` — running shell commands
+
+`shellTool` lets the agent execute shell commands (filesystem, `git`, builds, ...). Its handler returns `{ command, exitCode, stdout, stderr }` and never throws on a non-zero exit — the model gets the error text and can react to it.
+
+```js
+import { createAgent, shellTool } from 'ollama-agent-kit'
+
+const agent = createAgent({ tools: [shellTool] })          // defaults
+await agent.run('How many commits are on the current branch?')
+```
+
+**This is arbitrary command execution on the host machine** — only enable it in a trusted or sandboxed environment. Constrain it:
+
+```js
+const agent = createAgent({
+    tools: [shellTool({
+        cwd: '/srv/project',              // where commands run
+        timeout: 10_000,                  // kill after 10s
+        allow: (cmd) => !/\brm\b|\bsudo\b/.test(cmd),  // hard guard: return false to block
+    })],
+})
+```
+
+| Option      | Default          | Description |
+| ----------- | ---------------- | ----------- |
+| `cwd`       | `process.cwd()`  | Working directory for commands |
+| `timeout`   | `30000`          | Kill a command after this many ms |
+| `maxBuffer` | `1048576`        | Max bytes of stdout/stderr captured |
+| `shell`     | platform default | Shell used to run the command |
+| `allow`     | –                | `(command) => boolean`; return `false` to block a command |
+| `exposeMcp` | `false`          | Publish it over your MCP server too (off by default — it's dangerous) |
+
+## Configuring the agent
 
 `createAgent` injects the Ollama client, model and tools; `.run()` executes a prompt.
 
@@ -103,7 +149,7 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 
 `run(prompt, { model, tools })` accepts per-run overrides and returns the model's final answer.
 
-## MCP servers
+## Connecting to MCP servers
 
 External MCP servers (stdio or HTTP) are connected by `McpClientManager`. Their tools are loaded at run time, prefixed with the server name (`filesystem__read_file`), and merged into the same registry — local names win on collision.
 
@@ -128,7 +174,7 @@ await mcp.close()
 
 HTTP servers behind OAuth are supported via `FileOAuthProvider` (tokens persisted per-server under `.mcp-auth/`). Log in once with [`examples/mcp-auth.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/mcp-auth.js). You can also load a `{ servers: {...} }` JSON file with `loadMcpConfigFile(path)`.
 
-## Publish your tools over MCP
+## Serving your tools as an MCP server
 
 The reciprocal of `createAgent`: hand the **same** tool definitions to an MCP server and every tool flagged `exposeMcp: true` becomes callable by any MCP client (Claude Desktop, another agent, ...). The Zod schema is converted to JSON Schema for you.
 
@@ -145,7 +191,7 @@ await serveMcpHttp([bulb, add], { port: 3000 })      // online at http://localho
 
 See [`examples/serve-mcp.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/serve-mcp.js) for the full, runnable server.
 
-## Going online
+## Exposing the MCP server over HTTP
 
 An MCP server speaks over one of two **transports**:
 
@@ -181,12 +227,32 @@ await serveMcpHttp([bulb], {
 import {
     createAgent, createOllamaClient,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
-    webSearchTool, webFetchTool,
+    webSearchTool, webFetchTool, shellTool,
     McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
 } from 'ollama-agent-kit'
 ```
+
+## FAQ
+
+**Which Ollama models support tool calling?**
+Any model tagged with tool support in the [Ollama library](https://ollama.com/search?c=tools) — `qwen3` (the default), `llama3.1`, `mistral`, and others. Note that Ollama rejects a chat request that carries tools if the model doesn't support them, so pick a tool-capable model when the agent has tools configured.
+
+**Does it work fully offline?**
+Yes. The agent loop, local tools and stdio MCP servers need no network beyond your Ollama instance. Only `web_search` / `web_fetch` and cloud models require an `OLLAMA_API_KEY`.
+
+**Can the same tool be used by the agent and published over MCP?**
+Yes — that's the point of the registry. One `defineTool` definition with `exposeAgent: true` and `exposeMcp: true` serves both directions; the Zod schema is converted to JSON Schema wherever it's needed.
+
+**How does this compare to LangChain or the Vercel AI SDK?**
+Much smaller scope, on purpose: two runtime dependencies (`ollama`, `zod`), one loop, no prompt/chain abstractions, Ollama only. If you need multi-provider support, streaming UI helpers or RAG pipelines, use those frameworks. If you want a small, readable agent loop for local models that also speaks MCP in both directions, this is it.
+
+**Is it written in TypeScript?**
+No — plain ESM JavaScript, no bundled type definitions. Zod gives you runtime validation of tool arguments; editors still infer a fair amount from the JSDoc and Zod schemas.
+
+**Where does MCP fit if I'm new to it?**
+[MCP](https://modelcontextprotocol.io) is a standard protocol for exposing tools to AI clients. This kit is both a **client** (your agent can call tools from any MCP server) and a **server** (your tools become callable by Claude Desktop or any other MCP client).
 
 ## Tests
 

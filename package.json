@@ -1,7 +1,7 @@
 {
     "name": "ollama-agent-kit",
     "version": "0.1.0",
-    "description": "A minimal, autonomous tool-using agent loop for Ollama, with a unified registry that merges local (Zod) tools and MCP tools. Define a tool once — your agent uses it, your MCP server exposes it.",
+    "description": "Minimal Node.js library for building autonomous tool-calling AI agents on local LLMs with Ollama. A unified registry merges local (Zod) tools and MCP tools: define a tool once — your agent uses it, your MCP server exposes it.",
     "type": "module",
     "main": "./src/index.js",
     "exports": {
@@ -27,7 +27,15 @@
         "tool-calling",
         "tools",
         "zod",
-        "agentic"
+        "agentic",
+        "ai-agent",
+        "agent-framework",
+        "function-calling",
+        "autonomous-agent",
+        "local-llm",
+        "mcp-server",
+        "mcp-client",
+        "nodejs"
     ],
     "author": "niceunderground",
     "license": "MIT",
