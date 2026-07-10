@@ -81,6 +81,7 @@ A handful of tool factories ship with the kit. Pass them bare in `tools` (they r
 | `fsWriteFileTool`     | Create/overwrite a file                       | Local filesystem, no API key |
 | `fsEditFileTool`      | Replace an exact string occurrence in a file  | Local filesystem, no API key |
 | `fsListDirectoryTool` | List a directory's entries                    | Local filesystem, no API key |
+| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | Local shell, no API key. Runs arbitrary commands — only use with trusted models/prompts |
 
 ## Configuring the agent
 
@@ -199,7 +200,7 @@ import {
     createAgent, createOllamaClient,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
     webSearchTool, webFetchTool,
-    fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool,
+    fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool, runShellCommandTool,
     McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,

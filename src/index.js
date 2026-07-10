@@ -11,7 +11,7 @@ export {
     toOllamaTool,
     toHandlerMap,
 } from './registry.js'
-export { webSearchTool, webFetchTool, fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool } from './tools/index.js'
+export { webSearchTool, webFetchTool, fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool, runShellCommandTool } from './tools/index.js'
 export {
     McpClientManager,
     createMcpTools,
