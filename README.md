@@ -71,12 +71,16 @@ See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-
 
 ## Built-in tools
 
-Two tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
+A handful of tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
 
-| Tool             | Purpose                            | Notes |
-| ---------------- | ---------------------------------- | ----- |
-| `webSearchTool`  | Web search via the Ollama web API  | Needs `OLLAMA_API_KEY` |
-| `webFetchTool`   | Fetch the content of a URL         | Needs `OLLAMA_API_KEY` |
+| Tool                  | Purpose                                      | Notes |
+| --------------------- | --------------------------------------------- | ----- |
+| `webSearchTool`       | Web search via the Ollama web API             | Needs `OLLAMA_API_KEY` |
+| `webFetchTool`        | Fetch the content of a URL                    | Needs `OLLAMA_API_KEY` |
+| `fsReadFileTool`      | Read a file's full text content               | Local filesystem, no API key |
+| `fsWriteFileTool`     | Create/overwrite a file                       | Local filesystem, no API key |
+| `fsEditFileTool`      | Replace an exact string occurrence in a file  | Local filesystem, no API key |
+| `fsListDirectoryTool` | List a directory's entries                    | Local filesystem, no API key |
 
 ## Configuring the agent
 
@@ -195,6 +199,7 @@ import {
     createAgent, createOllamaClient,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
     webSearchTool, webFetchTool,
+    fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool,
     McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
