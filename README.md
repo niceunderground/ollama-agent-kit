@@ -41,6 +41,20 @@ const answer = await agent.run('Summarize the latest new media art news')
 console.log(answer)
 ```
 
+That agent *reads*. Give it the filesystem and shell tools and it *acts* — reads a file, edits it, runs a command, all in one loop:
+
+```js
+import { createAgent, readFileTool, writeFileTool, editFileTool, runShellCommandTool } from 'ollama-agent-kit'
+
+const agent = createAgent({
+    model: 'qwen3',
+    tools: [readFileTool, writeFileTool, editFileTool, runShellCommandTool],
+})
+await agent.run('Read package.json, bump the patch version, and run the tests')
+```
+
+> ⚠️ `runShellCommandTool` executes arbitrary shell commands with your process's permissions. Only enable it for models and prompts you trust — see [Built-in tools](#built-in-tools).
+
 ## Defining a tool
 
 One object, a Zod schema, a handler. `exposeAgent` / `exposeMcp` decide where it shows up — the **same definition** serves both the agent loop and your MCP server.
@@ -71,17 +85,28 @@ See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-
 
 ## Built-in tools
 
-A handful of tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options:
+A handful of tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options.
+
+They split into two groups: tools that **fetch information** and tools that **act on your machine** — the filesystem and shell tools let the agent create, modify and run things, not just read them.
+
+**Fetch information**
 
 | Tool                  | Purpose                                      | Notes |
 | --------------------- | --------------------------------------------- | ----- |
 | `webSearchTool`       | Web search via the Ollama web API             | Needs `OLLAMA_API_KEY` |
 | `webFetchTool`        | Fetch the content of a URL                    | Needs `OLLAMA_API_KEY` |
 | `readFileTool`        | Read a file's full text content               | Local filesystem |
-| `writeFileTool`       | Create/overwrite a file                       | Local filesystem |
-| `editFileTool`        | Replace an exact string occurrence in a file  | Local filesystem |
 | `listDirectoryTool`   | List a directory's entries                    | Local filesystem |
-| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | Local shell. Runs arbitrary commands — only use with trusted models/prompts |
+
+**Act on your machine**
+
+| Tool                  | Purpose                                      | Notes |
+| --------------------- | --------------------------------------------- | ----- |
+| `writeFileTool`       | Create/overwrite a file                       | Writes to the local filesystem |
+| `editFileTool`        | Replace an exact string occurrence in a file  | Modifies files in place |
+| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | **Runs arbitrary commands with your process's permissions — only enable it for models and prompts you trust.** |
+
+> **A note on trust.** The "act" tools give an autonomous loop real power over your machine: it can overwrite files and run shell commands without asking. That's the point — but scope what you pass in. On untrusted input, prefer the read-only tools, run the agent in a sandbox/container, or drop `runShellCommandTool`.
 
 ## Configuring the agent
 
