@@ -47,7 +47,7 @@ That agent *reads*. Give it the filesystem and shell tools and it *acts* — rea
 import { createAgent, readFileTool, writeFileTool, editFileTool, runShellCommandTool } from 'ollama-agent-kit'
 
 const agent = createAgent({
-    model: 'qwen3',
+    model: 'gemma4:latest',
     tools: [readFileTool, writeFileTool, editFileTool, runShellCommandTool],
 })
 await agent.run('Read package.json, bump the patch version, and run the tests')
@@ -116,7 +116,7 @@ They split into two groups: tools that **fetch information** and tools that **ac
 const agent = createAgent({
     host: 'http://localhost:11434',   // optional (this is the default) — or a pre-built `client`
     apiKey: process.env.OLLAMA_API_KEY, // one key for cloud models + web tools
-    model: 'qwen3',
+    model: 'gemma4:latest',
     tools: [bulb, webSearchTool],     // bare tool factories reuse the agent's client/apiKey
     onTurn:     ({ turn }) => console.log(`turn ${turn}`),
     onToolCall: ({ name, result }) => console.log(`→ ${name}`, result),
@@ -133,7 +133,7 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 | `apiKey`       | –                      | Ollama API key (ignored if `client` is given)                      |
 | `fetch`        | –                      | Custom fetch, injected instead of patching `globalThis`            |
 | `client`       | –                      | A pre-built Ollama client (overrides `host`/`apiKey`/`fetch`)      |
-| `model`        | `qwen3`                | Any Ollama model with tool-calling support                         |
+| `model`        | `gemma4:latest`                | Any Ollama model with tool-calling support                         |
 | `think`        | unset                  | Ollama thinking effort (`'low'`\|`'medium'`\|`'high'`). Only sent when set, so non-thinking models work out of the box |
 | `temperature`  | `0.8`                  | Sampling temperature                                               |
 | `systemPrompt` | built-in               | System prompt for the agent                                        |
@@ -235,7 +235,7 @@ import {
 ## FAQ
 
 **Which Ollama models support tool calling?**
-Any model tagged with tool support in the [Ollama library](https://ollama.com/search?c=tools) — `qwen3` (the default), `llama3.1`, `mistral`, and others. Note that Ollama rejects a chat request that carries tools if the model doesn't support them, so pick a tool-capable model when the agent has tools configured.
+Any model tagged with tool support in the [Ollama library](https://ollama.com/search?c=tools) — `gemma4:latest` (the default), `llama3.1`, `mistral`, and others. Note that Ollama rejects a chat request that carries tools if the model doesn't support them, so pick a tool-capable model when the agent has tools configured.
 
 **Does it work fully offline?**
 Yes. The agent loop, local tools and stdio MCP servers need no network beyond your Ollama instance. Only `web_search` / `web_fetch` and cloud models require an `OLLAMA_API_KEY`.
