@@ -77,11 +77,11 @@ A handful of tool factories ship with the kit. Pass them bare in `tools` (they r
 | --------------------- | --------------------------------------------- | ----- |
 | `webSearchTool`       | Web search via the Ollama web API             | Needs `OLLAMA_API_KEY` |
 | `webFetchTool`        | Fetch the content of a URL                    | Needs `OLLAMA_API_KEY` |
-| `fsReadFileTool`      | Read a file's full text content               | Local filesystem, no API key |
-| `fsWriteFileTool`     | Create/overwrite a file                       | Local filesystem, no API key |
-| `fsEditFileTool`      | Replace an exact string occurrence in a file  | Local filesystem, no API key |
-| `fsListDirectoryTool` | List a directory's entries                    | Local filesystem, no API key |
-| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | Local shell, no API key. Runs arbitrary commands — only use with trusted models/prompts |
+| `readFileTool`        | Read a file's full text content               | Local filesystem |
+| `writeFileTool`       | Create/overwrite a file                       | Local filesystem |
+| `editFileTool`        | Replace an exact string occurrence in a file  | Local filesystem |
+| `listDirectoryTool`   | List a directory's entries                    | Local filesystem |
+| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | Local shell. Runs arbitrary commands — only use with trusted models/prompts |
 
 ## Configuring the agent
 
@@ -200,7 +200,7 @@ import {
     createAgent, createOllamaClient,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
     webSearchTool, webFetchTool,
-    fsReadFileTool, fsWriteFileTool, fsEditFileTool, fsListDirectoryTool, runShellCommandTool,
+    readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool,
     McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
