@@ -9,7 +9,7 @@ import { createAgent, webSearchTool, webFetchTool } from 'ollama-agent-kit'
 const agent = createAgent({
     host: process.env.OLLAMA_HOST,        // defaults to http://localhost:11434
     apiKey: process.env.OLLAMA_API_KEY,   // shared by cloud models and the web tools below
-    model: process.env.OLLAMA_MODEL || 'qwen3',
+    model: process.env.OLLAMA_MODEL || 'gemma4:latest',
     tools: [
         webSearchTool,
         webFetchTool,

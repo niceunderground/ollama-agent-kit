@@ -28,7 +28,7 @@ const mcp = new McpClientManager({
 
 const agent = createAgent({
     host: process.env.OLLAMA_HOST,
-    model: process.env.OLLAMA_MODEL || 'qwen3',
+    model: process.env.OLLAMA_MODEL || 'gemma4:latest',
     tools: [],           // add your local tools here
     mcp,                 // remote tools are prefixed, e.g. `filesystem__read_file`
     onToolCall: ({ name }) => console.log(`→ ${name}`),

@@ -38,7 +38,7 @@ const bulb = defineTool({
 
 const agent = createAgent({
     host: process.env.OLLAMA_HOST,
-    model: process.env.OLLAMA_MODEL || 'qwen3',
+    model: process.env.OLLAMA_MODEL || 'gemma4:latest',
     tools: [bulb],
     onToolCall: ({ name, arguments: args, result }) => console.log(`→ ${name}`, args, '=>', result),
 })

@@ -40,7 +40,7 @@ async function resolveMcpTools(mcp) {
  * @param {string}   [config.apiKey] Ollama API key (ignored if `client` is given).
  * @param {Function} [config.fetch] Custom fetch, injected instead of patching globalThis.
  * @param {import('ollama').Ollama} [config.client] A pre-built Ollama client (overrides host/apiKey/fetch).
- * @param {string}   [config.model='qwen3'] Any Ollama model with tool-calling support.
+ * @param {string}   [config.model='gemma4:latest'] Any Ollama model with tool-calling support.
  * @param {string}   [config.think] Ollama thinking effort (e.g. 'low'|'medium'|'high'). Omitted from
  *   the request when unset, so non-thinking models work out of the box.
  * @param {number}   [config.temperature=0.8] Sampling temperature.
@@ -60,7 +60,7 @@ export function createAgent({
     apiKey,
     fetch,
     client,
-    model = 'qwen3',
+    model = 'gemma4:latest',
     think,
     temperature = 0.8,
     systemPrompt = defaultSystemPrompt,
