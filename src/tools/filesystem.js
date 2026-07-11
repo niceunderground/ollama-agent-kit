@@ -5,12 +5,12 @@ import { dirname, resolve } from 'path'
 const resolvePath = p => resolve(p)
 
 /**
- * `fs_read_file` tool: read the full text content of a file.
+ * `read_file` tool: read the full text content of a file.
  * @returns {import('../registry.js').Tool}
  */
-export function fsReadFileTool() {
+export function readFileTool() {
     return {
-        name: 'fs_read_file',
+        name: 'read_file',
         description: 'Read the full text content of a file from the filesystem and return it. Use it to inspect a file before editing.',
         parameters: z.object({
             path: z.string().describe('Absolute or relative path of the file to read'),
@@ -27,12 +27,12 @@ export function fsReadFileTool() {
 }
 
 /**
- * `fs_write_file` tool: create or overwrite a file with the given content.
+ * `write_file` tool: create or overwrite a file with the given content.
  * @returns {import('../registry.js').Tool}
  */
-export function fsWriteFileTool() {
+export function writeFileTool() {
     return {
-        name: 'fs_write_file',
+        name: 'write_file',
         description: 'Write text content to a file, creating it (and any missing parent directories) or overwriting it entirely if it already exists.',
         parameters: z.object({
             path: z.string().describe('Absolute or relative path of the file to write'),
@@ -51,12 +51,12 @@ export function fsWriteFileTool() {
 }
 
 /**
- * `fs_edit_file` tool: replace an exact string occurrence within a file.
+ * `edit_file` tool: replace an exact string occurrence within a file.
  * @returns {import('../registry.js').Tool}
  */
-export function fsEditFileTool() {
+export function editFileTool() {
     return {
-        name: 'fs_edit_file',
+        name: 'edit_file',
         description: 'Edit a file by replacing an exact occurrence of a string with another. The "oldString" must appear exactly once in the file unless "replaceAll" is true. Use it for targeted changes without rewriting the whole file.',
         parameters: z.object({
             path: z.string().describe('Absolute or relative path of the file to edit'),
@@ -90,12 +90,12 @@ export function fsEditFileTool() {
 }
 
 /**
- * `fs_list_directory` tool: list the entries of a directory.
+ * `list_directory` tool: list the entries of a directory.
  * @returns {import('../registry.js').Tool}
  */
-export function fsListDirectoryTool() {
+export function listDirectoryTool() {
     return {
-        name: 'fs_list_directory',
+        name: 'list_directory',
         description: 'List the entries of a directory, marking each as a file or a directory. Use it to explore the filesystem.',
         parameters: z.object({
             path: z.string().optional().describe('Absolute or relative path of the directory to list (defaults to the current working directory)'),
