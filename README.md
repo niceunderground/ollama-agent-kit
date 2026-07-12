@@ -1,12 +1,54 @@
 # ollama-agent-kit
 
+Give a local LLM hands. A minimal Node.js agent loop for [Ollama](https://ollama.com) that lets the model read, write and edit files, run shell commands, and call tools from any [MCP](https://modelcontextprotocol.io) server — entirely on your machine.
+
 [![npm version](https://img.shields.io/npm/v/ollama-agent-kit)](https://www.npmjs.com/package/ollama-agent-kit)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![node >= 18](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org)
 
-**ollama-agent-kit** is a minimal Node.js library for building autonomous, tool-calling AI agents on local LLMs with [Ollama](https://ollama.com). It provides an agent loop with function calling and a unified tool registry that merges **local tools** (defined with [Zod](https://zod.dev) schemas) and **MCP tools** (loaded from external [Model Context Protocol](https://modelcontextprotocol.io) servers).
+**[→ npm](https://www.npmjs.com/package/ollama-agent-kit)** · **[→ Examples](https://github.com/niceunderground/ollama-agent-kit/tree/main/examples)**
 
-> **Define a tool once — your agent uses it, and your MCP server exposes it.** The registry works in both directions.
+---
+
+## Table of contents
+
+- [Why an agent on a local model](#why-an-agent-on-a-local-model)
+- [How it works](#how-it-works)
+- [Install](#install)
+- [Built-in tools](#built-in-tools)
+- [Defining a tool](#defining-a-tool)
+- [One registry, two directions](#one-registry-two-directions)
+- [Configuring the agent](#configuring-the-agent)
+- [Connecting to MCP servers](#connecting-to-mcp-servers)
+- [Serving your tools as an MCP server](#serving-your-tools-as-an-mcp-server)
+- [API](#api)
+- [FAQ](#faq)
+- [Tests](#tests)
+- [License](#license)
+
+## Why an agent on a local model
+
+An agent is only useful when it can *act*: modify files, run commands, touch the system it lives on. Nobody in their right mind hands that power to a cloud API. With a model running on your own hardware the equation changes: prompts, file contents and command output never leave your machine, inference costs nothing after setup, and everything keeps working offline.
+
+ollama-agent-kit is built for exactly that scenario. Two runtime dependencies (`ollama`, `zod`), no chains, no prompt abstractions, no framework tax — small enough to run comfortably next to the model on a Raspberry Pi or a home server, readable enough to audit in an afternoon.
+
+```js
+import { createAgent, readFileTool, writeFileTool, editFileTool, runShellCommandTool } from 'ollama-agent-kit'
+
+const agent = createAgent({
+    model: 'gemma4:latest',
+    tools: [readFileTool, writeFileTool, editFileTool, runShellCommandTool],
+})
+await agent.run('Read package.json, bump the patch version, and run the tests')
+```
+
+That's a fully autonomous loop on a local model: it reads the file, edits it, runs the command, checks the output — no API key, no network, no data leaving the LAN.
+
+<!-- TODO: terminal demo GIF here — record the loop above with `vhs` or asciinema+agg and embed it: ![ollama-agent-kit demo](docs/demo.gif) -->
+
+> ⚠️ `runShellCommandTool` executes arbitrary commands with your process's permissions. Only enable it for models and prompts you trust — see [A note on trust](#a-note-on-trust).
+
+## How it works
 
 The core is intentionally small: a chat loop that sends the conversation to Ollama, executes any requested tool calls **in parallel**, feeds the results back, and stops when the model produces a final answer (or `maxTurns` is reached).
 
@@ -29,35 +71,36 @@ npm install ollama-agent-kit
 npm install @modelcontextprotocol/sdk
 ```
 
-Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling model. `web_search` / `web_fetch` need an `OLLAMA_API_KEY` (Ollama Cloud).
+Requires **Node.js 18+** and a reachable Ollama instance with a tool-calling model. `webSearchTool` / `webFetchTool` need an `OLLAMA_API_KEY` (Ollama Cloud).
 
-## Quick start — four lines
+## Built-in tools
 
-```js
-import { createAgent, webSearchTool } from 'ollama-agent-kit'
+A handful of tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options. They split into two groups: tools that **act on your machine** and tools that **fetch information**.
 
-const agent = createAgent({ apiKey: process.env.OLLAMA_API_KEY, tools: [webSearchTool] })
-const answer = await agent.run('Summarize the latest new media art news')
-console.log(answer)
-```
+**Act on your machine**
 
-That agent *reads*. Give it the filesystem and shell tools and it *acts* — reads a file, edits it, runs a command, all in one loop:
+| Tool                  | Purpose                                        | Notes |
+| --------------------- | ---------------------------------------------- | ----- |
+| `writeFileTool`       | Create/overwrite a file                        | Writes to the local filesystem |
+| `editFileTool`        | Replace an exact string occurrence in a file (all occurrences with `replaceAll`) | Modifies files in place |
+| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | **Runs arbitrary commands with your process's permissions — only enable it for models and prompts you trust.** |
 
-```js
-import { createAgent, readFileTool, writeFileTool, editFileTool, runShellCommandTool } from 'ollama-agent-kit'
+**Fetch information**
 
-const agent = createAgent({
-    model: 'gemma4:latest',
-    tools: [readFileTool, writeFileTool, editFileTool, runShellCommandTool],
-})
-await agent.run('Read package.json, bump the patch version, and run the tests')
-```
+| Tool                  | Purpose                            | Notes |
+| --------------------- | ---------------------------------- | ----- |
+| `readFileTool`        | Read a file's full text content    | Local filesystem |
+| `listDirectoryTool`   | List a directory's entries         | Local filesystem |
+| `webSearchTool`       | Web search via the Ollama web API  | Needs `OLLAMA_API_KEY` |
+| `webFetchTool`        | Fetch the content of a URL         | Needs `OLLAMA_API_KEY` |
 
-> ⚠️ `runShellCommandTool` executes arbitrary shell commands with your process's permissions. Only enable it for models and prompts you trust — see [Built-in tools](#built-in-tools).
+### A note on trust
+
+The "act" tools give an autonomous loop real power over your machine: it can overwrite files and run shell commands without asking. That's the point — but scope what you pass in. On untrusted input, prefer the read-only tools, run the agent in a sandbox/container, or drop `runShellCommandTool`. The advantage of a local model is that the blast radius is a machine you own, not an account on someone else's cloud.
 
 ## Defining a tool
 
-One object, a Zod schema, a handler. `exposeAgent` / `exposeMcp` decide where it shows up — the **same definition** serves both the agent loop and your MCP server.
+One object, a Zod schema, a handler. Anything on your system with an API — a light, a script, a device — becomes something the model can operate.
 
 ```js
 import { defineTool } from 'ollama-agent-kit'
@@ -81,32 +124,11 @@ export const bulb = defineTool({
 - Tools are validated up front (name present, handler is a function, no duplicates) so a malformed tool fails immediately instead of mid-conversation.
 - MCP tools arrive already carrying JSON Schema (`rawParameters`), so both kinds live in one registry.
 
-See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/home-lights.js) for the full home-automation demo — the kind of thing that runs happily on a Raspberry Pi.
+See [`examples/home-lights.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/home-lights.js) for the full home-automation demo — an agent controlling real lights from a local model, the kind of thing that runs happily on a Raspberry Pi.
 
-## Built-in tools
+## One registry, two directions
 
-A handful of tool factories ship with the kit. Pass them bare in `tools` (they reuse the agent's client) or call them with options.
-
-They split into two groups: tools that **fetch information** and tools that **act on your machine** — the filesystem and shell tools let the agent create, modify and run things, not just read them.
-
-**Fetch information**
-
-| Tool                  | Purpose                                      | Notes |
-| --------------------- | --------------------------------------------- | ----- |
-| `webSearchTool`       | Web search via the Ollama web API             | Needs `OLLAMA_API_KEY` |
-| `webFetchTool`        | Fetch the content of a URL                    | Needs `OLLAMA_API_KEY` |
-| `readFileTool`        | Read a file's full text content               | Local filesystem |
-| `listDirectoryTool`   | List a directory's entries                    | Local filesystem |
-
-**Act on your machine**
-
-| Tool                  | Purpose                                      | Notes |
-| --------------------- | --------------------------------------------- | ----- |
-| `writeFileTool`       | Create/overwrite a file                       | Writes to the local filesystem |
-| `editFileTool`        | Replace an exact string occurrence in a file  | Modifies files in place |
-| `runShellCommandTool` | Execute a shell command, returns stdout/stderr | **Runs arbitrary commands with your process's permissions — only enable it for models and prompts you trust.** |
-
-> **A note on trust.** The "act" tools give an autonomous loop real power over your machine: it can overwrite files and run shell commands without asking. That's the point — but scope what you pass in. On untrusted input, prefer the read-only tools, run the agent in a sandbox/container, or drop `runShellCommandTool`.
+The registry is what makes the tool definition above reusable: **define a tool once — your agent uses it, and your MCP server exposes it.** `exposeAgent` / `exposeMcp` decide where it shows up; the same definition serves both the agent loop and your own MCP server, and external MCP tools land in the same registry next to your local ones.
 
 ## Configuring the agent
 
@@ -133,7 +155,7 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 | `apiKey`       | –                      | Ollama API key (ignored if `client` is given)                      |
 | `fetch`        | –                      | Custom fetch, injected instead of patching `globalThis`            |
 | `client`       | –                      | A pre-built Ollama client (overrides `host`/`apiKey`/`fetch`)      |
-| `model`        | `gemma4:latest`                | Any Ollama model with tool-calling support                         |
+| `model`        | `gemma4:latest`        | Any Ollama model with tool-calling support                         |
 | `think`        | unset                  | Ollama thinking effort (`'low'`\|`'medium'`\|`'high'`). Only sent when set, so non-thinking models work out of the box |
 | `temperature`  | `0.8`                  | Sampling temperature                                               |
 | `systemPrompt` | built-in               | System prompt for the agent                                        |
@@ -188,7 +210,7 @@ await serveMcpHttp([bulb, add], { port: 3000 })      // online at http://localho
 
 See [`examples/serve-mcp.js`](https://github.com/niceunderground/ollama-agent-kit/blob/main/examples/serve-mcp.js) for the full, runnable server.
 
-## Exposing the MCP server over HTTP
+### Exposing it over HTTP
 
 An MCP server speaks over one of two **transports**:
 
@@ -222,11 +244,11 @@ await serveMcpHttp([bulb], {
 
 ```js
 import {
-    createAgent, createOllamaClient,
+    createAgent, createOllamaClient, defaultSystemPrompt,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
     webSearchTool, webFetchTool,
     readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool,
-    McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider,
+    McpClientManager, createMcpTools, loadMcpConfigFile, FileOAuthProvider, DEFAULT_CALLBACK_PORT,
     createMcpServer, serveMcpStdio, serveMcpHttp,
     AgentError, MaxTurnsError, ToolNotFoundError, RegistryError,
 } from 'ollama-agent-kit'
@@ -234,17 +256,20 @@ import {
 
 ## FAQ
 
+**Why run an agent on a local model instead of a cloud API?**
+Because of what the agent is allowed to do. Filesystem and shell access on a cloud-connected agent means your files and command output transit someone else's servers. On a local model everything stays on your hardware: full privacy, zero inference cost after setup, and it keeps working with no internet connection.
+
 **Which Ollama models support tool calling?**
 Any model tagged with tool support in the [Ollama library](https://ollama.com/search?c=tools) — `gemma4:latest` (the default), `llama3.1`, `mistral`, and others. Note that Ollama rejects a chat request that carries tools if the model doesn't support them, so pick a tool-capable model when the agent has tools configured.
 
 **Does it work fully offline?**
-Yes. The agent loop, local tools and stdio MCP servers need no network beyond your Ollama instance. Only `web_search` / `web_fetch` and cloud models require an `OLLAMA_API_KEY`.
+Yes. The agent loop, local tools and stdio MCP servers need no network beyond your Ollama instance. Only `webSearchTool` / `webFetchTool` and cloud models require an `OLLAMA_API_KEY`.
 
 **Can the same tool be used by the agent and published over MCP?**
 Yes — that's the point of the registry. One `defineTool` definition with `exposeAgent: true` and `exposeMcp: true` serves both directions; the Zod schema is converted to JSON Schema wherever it's needed.
 
 **How does this compare to LangChain or the Vercel AI SDK?**
-Much smaller scope, on purpose: two runtime dependencies (`ollama`, `zod`), one loop, no prompt/chain abstractions, Ollama only. If you need multi-provider support, streaming UI helpers or RAG pipelines, use those frameworks. If you want a small, readable agent loop for local models that also speaks MCP in both directions, this is it.
+Much smaller scope, on purpose: two runtime dependencies (`ollama`, `zod`), one loop, no prompt/chain abstractions, Ollama only. If you need multi-provider support, streaming UI helpers or RAG pipelines, use those frameworks. If you want a small, readable agent loop that gives a local model real capabilities — files, shell, MCP in both directions — this is it.
 
 **Is it written in TypeScript?**
 No — plain ESM JavaScript, no bundled type definitions. Zod gives you runtime validation of tool arguments; editors still infer a fair amount from the JSDoc and Zod schemas.
@@ -260,4 +285,4 @@ npm test        # node --test
 
 ## License
 
-[MIT](LICENSE) © niceunderground
+[MIT](LICENSE) niceunderground
