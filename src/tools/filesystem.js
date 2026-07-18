@@ -1,14 +1,44 @@
 import { z } from 'zod'
 import { readFile, writeFile, mkdir, readdir, stat } from 'fs/promises'
-import { dirname, resolve } from 'path'
+import { dirname, resolve, relative, isAbsolute } from 'path'
 
-const resolvePath = p => resolve(p)
+/**
+ * Build the path resolver shared by the filesystem tools.
+ *
+ * - No `workdir`: relative paths resolve against `process.cwd()`, any path on the
+ *   machine is allowed (full access, the historical behavior).
+ * - `workdir` set: relative paths resolve against it and access is restricted to
+ *   that folder — a path escaping it makes the tool report an error to the model.
+ * - `workdir` + `fullAccess: true`: `workdir` stays the default base for relative
+ *   paths, but any path on the machine is allowed.
+ *
+ * @param {object} [opts]
+ * @param {string}  [opts.workdir] Base folder for relative paths.
+ * @param {boolean} [opts.fullAccess] Allow paths outside `workdir`.
+ */
+function createPathResolver({ workdir, fullAccess } = {}) {
+    const base = workdir ? resolve(workdir) : process.cwd()
+    return (p = '.') => {
+        const full = resolve(base, p)
+        if (workdir && !fullAccess) {
+            const rel = relative(base, full)
+            if (rel.startsWith('..') || isAbsolute(rel)) {
+                throw new Error(`Access denied: "${full}" is outside the working folder "${base}".`)
+            }
+        }
+        return full
+    }
+}
 
 /**
  * `read_file` tool: read the full text content of a file.
+ * @param {object} [opts]
+ * @param {string}  [opts.workdir] Base folder for relative paths; restricts access to it unless `fullAccess` is true.
+ * @param {boolean} [opts.fullAccess] Allow paths outside `workdir` (whole machine).
  * @returns {import('../registry.js').Tool}
  */
-export function readFileTool() {
+export function readFileTool({ workdir, fullAccess } = {}) {
+    const resolvePath = createPathResolver({ workdir, fullAccess })
     return {
         name: 'read_file',
         description: 'Read the full text content of a file from the filesystem and return it. Use it to inspect a file before editing.',
@@ -28,9 +58,13 @@ export function readFileTool() {
 
 /**
  * `write_file` tool: create or overwrite a file with the given content.
+ * @param {object} [opts]
+ * @param {string}  [opts.workdir] Base folder for relative paths; restricts access to it unless `fullAccess` is true.
+ * @param {boolean} [opts.fullAccess] Allow paths outside `workdir` (whole machine).
  * @returns {import('../registry.js').Tool}
  */
-export function writeFileTool() {
+export function writeFileTool({ workdir, fullAccess } = {}) {
+    const resolvePath = createPathResolver({ workdir, fullAccess })
     return {
         name: 'write_file',
         description: 'Write text content to a file, creating it (and any missing parent directories) or overwriting it entirely if it already exists.',
@@ -52,9 +86,13 @@ export function writeFileTool() {
 
 /**
  * `edit_file` tool: replace an exact string occurrence within a file.
+ * @param {object} [opts]
+ * @param {string}  [opts.workdir] Base folder for relative paths; restricts access to it unless `fullAccess` is true.
+ * @param {boolean} [opts.fullAccess] Allow paths outside `workdir` (whole machine).
  * @returns {import('../registry.js').Tool}
  */
-export function editFileTool() {
+export function editFileTool({ workdir, fullAccess } = {}) {
+    const resolvePath = createPathResolver({ workdir, fullAccess })
     return {
         name: 'edit_file',
         description: 'Edit a file by replacing an exact occurrence of a string with another. The "oldString" must appear exactly once in the file unless "replaceAll" is true. Use it for targeted changes without rewriting the whole file.',
@@ -91,20 +129,24 @@ export function editFileTool() {
 
 /**
  * `list_directory` tool: list the entries of a directory.
+ * @param {object} [opts]
+ * @param {string}  [opts.workdir] Base folder for relative paths; restricts access to it unless `fullAccess` is true.
+ * @param {boolean} [opts.fullAccess] Allow paths outside `workdir` (whole machine).
  * @returns {import('../registry.js').Tool}
  */
-export function listDirectoryTool() {
+export function listDirectoryTool({ workdir, fullAccess } = {}) {
+    const resolvePath = createPathResolver({ workdir, fullAccess })
     return {
         name: 'list_directory',
         description: 'List the entries of a directory, marking each as a file or a directory. Use it to explore the filesystem.',
         parameters: z.object({
-            path: z.string().optional().describe('Absolute or relative path of the directory to list (defaults to the current working directory)'),
+            path: z.string().optional().describe('Absolute or relative path of the directory to list (defaults to the working folder)'),
         }),
         exposeAgent: true,
         exposeMcp: false,
         handler: async ({ path }) => {
             console.log(`Listing directory: ${path ?? '.'}`)
-            const full = resolvePath(path ?? '.')
+            const full = resolvePath(path)
             const entries = await readdir(full)
             if (entries.length === 0) return `(directory "${full}" is empty)`
 

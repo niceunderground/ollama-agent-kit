@@ -106,6 +106,99 @@ test('run throws MaxTurnsError when the model never stops', async () => {
     await assert.rejects(() => agent.run('loop'), MaxTurnsError)
 })
 
+test('run with opts.messages keeps a persistent conversation across runs', async () => {
+    const client = fakeClient([
+        { content: 'first answer', tool_calls: [] },
+        { content: 'second answer', tool_calls: [] },
+    ])
+    const agent = createAgent({ client, tools: [echoTool] })
+
+    const history = []
+    await agent.run('first question', { messages: history })
+    assert.equal(history[0].role, 'system')
+    assert.deepEqual(history[1], { role: 'user', content: 'first question' })
+    assert.equal(history[2].content, 'first answer')
+
+    await agent.run('second question', { messages: history })
+    // the second request carried the whole conversation
+    const secondRequest = client.calls[1].messages
+    assert.deepEqual(secondRequest.filter(m => m.role === 'user').map(m => m.content), ['first question', 'second question'])
+    assert.equal(history.at(-1).content, 'second answer')
+    assert.equal(history.length, 5)
+})
+
+test('run accepts a messages array directly, normalizing string entries', async () => {
+    const client = fakeClient([{ content: 'ok', tool_calls: [] }])
+    const agent = createAgent({ client, tools: [echoTool] })
+
+    const history = ['hello']
+    const answer = await agent.run(history)
+    assert.equal(answer, 'ok')
+    assert.equal(history[0].role, 'system')
+    assert.deepEqual(history[1], { role: 'user', content: 'hello' })
+    assert.equal(history.at(-1).content, 'ok')
+})
+
+test('a string prompt without opts.messages stays a single task', async () => {
+    const client = fakeClient([
+        { content: 'a', tool_calls: [] },
+        { content: 'b', tool_calls: [] },
+    ])
+    const agent = createAgent({ client, tools: [echoTool] })
+    await agent.run('one')
+    await agent.run('two')
+    // each run started a fresh conversation: one user message per request
+    assert.equal(client.calls[1].messages.filter(m => m.role === 'user').length, 1)
+})
+
+test('run attaches images to the user message, normalized to base64', async () => {
+    const client = fakeClient([{ content: 'a red pixel', tool_calls: [] }])
+    const agent = createAgent({ client })
+
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47])
+    await agent.run('What is in this image?', { images: [bytes] })
+
+    const userMsg = client.calls[0].messages.find(m => m.role === 'user')
+    assert.deepEqual(userMsg.images, [bytes.toString('base64')])
+})
+
+test('run with opts.messages carries images on the appended user message', async () => {
+    const client = fakeClient([{ content: 'seen', tool_calls: [] }])
+    const agent = createAgent({ client })
+
+    const history = []
+    const bytes = Buffer.from('img')
+    await agent.run('Look at this', { messages: history, images: [bytes] })
+
+    const userMsg = history.find(m => m.role === 'user')
+    assert.deepEqual(userMsg.images, [bytes.toString('base64')])
+})
+
+test('images inside a messages-array input are resolved before the request', async () => {
+    const client = fakeClient([{ content: 'ok', tool_calls: [] }])
+    const agent = createAgent({ client })
+
+    const bytes = Buffer.from('img')
+    await agent.run([{ role: 'user', content: 'describe', images: [bytes] }])
+
+    const userMsg = client.calls[0].messages.find(m => m.role === 'user')
+    assert.deepEqual(userMsg.images, [bytes.toString('base64')])
+})
+
+test('the request omits tools when the agent has none (vision models without tool support)', async () => {
+    const client = fakeClient([{ content: 'x', tool_calls: [] }])
+    const agent = createAgent({ client })
+    await agent.run('hi')
+    assert.ok(!('tools' in client.calls[0]))
+})
+
+test('the request still carries tools when the agent has them', async () => {
+    const client = fakeClient([{ content: 'x', tool_calls: [] }])
+    const agent = createAgent({ client, tools: [echoTool] })
+    await agent.run('hi')
+    assert.equal(client.calls[0].tools.length, 1)
+})
+
 test('a function entry in tools is called with the agent context (client, apiKey, host)', async () => {
     const client = fakeClient([{ content: 'x', tool_calls: [] }])
     let receivedCtx = null

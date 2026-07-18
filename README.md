@@ -19,6 +19,9 @@ Give a local LLM hands. A minimal Node.js agent loop for [Ollama](https://ollama
 - [Defining a tool](#defining-a-tool)
 - [One registry, two directions](#one-registry-two-directions)
 - [Configuring the agent](#configuring-the-agent)
+- [Persistent conversations](#persistent-conversations)
+- [Images and multimodal models](#images-and-multimodal-models)
+- [Working folder and full access](#working-folder-and-full-access)
 - [Connecting to MCP servers](#connecting-to-mcp-servers)
 - [Serving your tools as an MCP server](#serving-your-tools-as-an-mcp-server)
 - [API](#api)
@@ -96,7 +99,7 @@ A handful of tool factories ship with the kit. Pass them bare in `tools` (they r
 
 ### A note on trust
 
-The "act" tools give an autonomous loop real power over your machine: it can overwrite files and run shell commands without asking. That's the point — but scope what you pass in. On untrusted input, prefer the read-only tools, run the agent in a sandbox/container, or drop `runShellCommandTool`. The advantage of a local model is that the blast radius is a machine you own, not an account on someone else's cloud.
+The "act" tools give an autonomous loop real power over your machine: it can overwrite files and run shell commands without asking. That's the point — but scope what you pass in. Set a [`workdir`](#working-folder-and-full-access) to sandbox the filesystem tools to one folder; on untrusted input, prefer the read-only tools, run the agent in a sandbox/container, or drop `runShellCommandTool`. The advantage of a local model is that the blast radius is a machine you own, not an account on someone else's cloud.
 
 ## Defining a tool
 
@@ -160,13 +163,111 @@ await agent.run('Turn on the studio light and tell me the weather in Naples')
 | `temperature`  | `0.8`                  | Sampling temperature                                               |
 | `systemPrompt` | built-in               | System prompt for the agent                                        |
 | `maxTurns`     | `10`                   | Safety cap on loop iterations (throws `MaxTurnsError` if exceeded) |
+| `workdir`      | –                      | Working folder for the built-in filesystem/shell tools: relative paths resolve against it, the shell starts there, and file access is **restricted to it** unless `fullAccess` is true |
+| `fullAccess`   | `false`                | Lift the `workdir` restriction: the tools can reach the whole machine, `workdir` stays the default base path |
 | `tools`        | `[]`                   | Local tools available to the agent. An entry can also be a factory `(ctx) => Tool` called with `{ client, apiKey, host }` — so `webSearchTool` / `webFetchTool` can be passed bare and reuse the agent's client |
 | `mcp`          | `null`                 | `McpClientManager` \| `async () => tools` \| `tools[]` \| falsy    |
 | `onTurn`       | no-op                  | `({ turn, message, messages }) => void` after each model turn      |
 | `onToolCall`   | no-op                  | `({ name, arguments, result, error, turn }) => void` per tool call |
 | `onFinal`      | no-op                  | `({ content, turns, messages }) => void` on the final answer       |
 
-`run(prompt, { model, tools })` accepts per-run overrides and returns the model's final answer.
+`run(input, { model, tools, messages, images })` accepts per-run overrides and returns the model's final answer. `input` is a single-task prompt string, or a messages array for a [persistent conversation](#persistent-conversations). `images` attaches image inputs for [multimodal models](#images-and-multimodal-models).
+
+## Persistent conversations
+
+`run()` works in two modes:
+
+- **Single task** — pass a string. A fresh conversation is created, the agent solves the task and the history is discarded. Every run starts from zero.
+- **Persistent conversation** — pass a messages array (or a string plus a `messages` array). The array is used as the conversation history and every new message — user turns, assistant replies, tool results, the final answer — is **pushed into it**. Reuse the same array across runs and the agent remembers the whole conversation.
+
+```js
+const agent = createAgent({ model: 'gemma4:latest', tools: [readFileTool] })
+
+// Single task: no memory between runs
+await agent.run('Summarize package.json')
+
+// Persistent conversation: pass the same array every time
+const history = []
+await agent.run('Read package.json and tell me the version', { messages: history })
+await agent.run('Now bump it to the next minor', { messages: history })  // remembers the previous answer
+
+// Equivalent: manage the array yourself and pass it as the input
+history.push({ role: 'user', content: 'And what dependencies does it have?' })
+await agent.run(history)
+```
+
+Notes:
+
+- String entries in the array are normalized to `{ role: 'user', content }` messages.
+- The system prompt is inserted once at the top if the array doesn't already contain a `system` message.
+- The array is caller-owned: persist it to disk, trim it, or seed it with prior context as you like.
+
+## Images and multimodal models
+
+Vision models (e.g. `gemma3`, `llama3.2-vision`, `qwen2.5vl`, `llava`) accept images alongside the prompt. Pass them per run with `images`:
+
+```js
+const agent = createAgent({ model: 'gemma3:latest' })
+
+// A file path, straight from disk
+await agent.run('What is in this picture?', { images: ['./photo.png'] })
+
+// Any mix of formats works — everything is normalized to base64 for the Ollama API
+await agent.run('Compare these images', {
+    images: [
+        './local/screenshot.png',                 // file path
+        'https://example.com/chart.jpg',          // http(s) URL (fetched for you)
+        'data:image/png;base64,iVBORw0KGgo...',   // data: URI
+        fs.readFileSync('raw.webp'),              // Buffer / Uint8Array
+        'iVBORw0KGgoAAAANSUhEUg...',              // already-encoded base64
+    ],
+})
+```
+
+In a [persistent conversation](#persistent-conversations), `images` attaches to the user message being appended; in a messages array you manage yourself, put an `images` array on the user messages directly — it is normalized the same way:
+
+```js
+const history = []
+await agent.run('Describe this photo', { messages: history, images: ['./photo.png'] })
+await agent.run('Now write an alt text for it', { messages: history })  // remembers the image
+
+// Equivalent, managing the array yourself:
+await agent.run([{ role: 'user', content: 'Describe this photo', images: ['./photo.png'] }])
+```
+
+Notes:
+
+- Relative file paths resolve against the process working directory (they are caller inputs, not model inputs, so `workdir` does not apply).
+- Many vision models don't support tool calling, and Ollama rejects a request that carries tools the model can't use. The kit omits the `tools` field automatically when the agent has none, so a bare `createAgent({ model: 'llava' })` works out of the box; with tools configured, disable them for a vision run via the per-run override: `agent.run(prompt, { images, tools: [] })`.
+- The normalization helpers are exported if you need them standalone: `resolveImage(input)` / `resolveImages(inputs)` return base64 strings.
+
+## Working folder and full access
+
+`workdir` scopes the built-in filesystem and shell tools to a folder. Relative paths resolve against it, `run_shell_command` starts there, and any path escaping the folder is rejected — the model gets an `Access denied` error instead. Set `fullAccess: true` to lift the restriction and let the agent reach the whole machine, with `workdir` remaining the default base path.
+
+```js
+import { createAgent, readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool } from 'ollama-agent-kit'
+
+// Sandboxed to a project folder (recommended)
+const agent = createAgent({
+    workdir: '/home/me/my-project',
+    tools: [readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool],
+})
+
+// Full access to the whole machine, workdir is just the starting point
+const trusted = createAgent({
+    workdir: '/home/me/my-project',
+    fullAccess: true,
+    tools: [readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool],
+})
+
+// No workdir at all: historical behavior — full access, cwd as base path
+const free = createAgent({ tools: [readFileTool, runShellCommandTool] })
+```
+
+The options flow through the agent's tool context, so bare factories pick them up automatically; calling a factory directly with its own options also works (`readFileTool({ workdir, fullAccess })`, `runShellCommandTool({ workdir, cwd })`).
+
+> ⚠️ The sandbox applies to the **filesystem tools** (`read_file`, `write_file`, `edit_file`, `list_directory`). `run_shell_command` only *starts* in `workdir` — a shell command can still `cd` anywhere or use absolute paths. If containment matters, drop the shell tool or run the agent in a container.
 
 ## Connecting to MCP servers
 
@@ -245,6 +346,7 @@ await serveMcpHttp([bulb], {
 ```js
 import {
     createAgent, createOllamaClient, defaultSystemPrompt,
+    resolveImage, resolveImages,
     createRegistry, defineTool, validateTools, toOllamaTool, toHandlerMap,
     webSearchTool, webFetchTool,
     readFileTool, writeFileTool, editFileTool, listDirectoryTool, runShellCommandTool,

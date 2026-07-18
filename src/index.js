@@ -4,6 +4,7 @@
 
 export { createAgent, defaultSystemPrompt } from './agent.js'
 export { createOllamaClient } from './ollama.js'
+export { resolveImage, resolveImages } from './images.js'
 export {
     createRegistry,
     defineTool,
